@@ -5,6 +5,9 @@ from time import time
 import json
 import base64
 import random
+import Crypto.Random
+from Crypto.PublicKey import RSA
+import binascii
 
 class Transaction:
 
@@ -261,6 +264,22 @@ def verify_proof(entry, proof, root):
             curr_hash = hashlib.sha256((curr_hash+node.hash).encode()).hexdigest()
     return target_hash == curr_hash
 
+class Wallet :      
+    def new_wallet(self):
+        random_gen = Crypto.Random.new().read
+        private_key = RSA.generate(1024, random_gen)
+        public_key = private_key.publickey()
+        response = {
+            'private_key': binascii.hexlify(private_key.exportKey(format='DER')).decode('ascii'),
+            'public_key': binascii.hexlify(public_key.exportKey(format='DER')).decode('ascii')
+        }
+        print(response)
+        return response
+        
+###########################
+######## TESTING ##########
+###########################
+
 # b = Block('a','b','c','d')
 # print(json.dump(b.__dict__))
 start = time()
@@ -280,3 +299,7 @@ b.mine()
 print(b.chain)
 
 print(time()-start)
+
+#Generating wallet
+wallet = Wallet()
+wallet.new_wallet()
