@@ -134,6 +134,7 @@ class LeaveNode:
         return self
 
 class MerkleTree:
+
     def add(self,transaction):
         # Add entries to tree
         serialized_transaction = transaction.serialize()
@@ -173,6 +174,9 @@ class MerkleTree:
         # Return the current root
         return self.root.hash
 
+    def get_list(self):
+        return list(self.val2leave.keys())
+
     def serialize(self):
         serialized_transactions = list(self.val2leave.keys())
         data = {
@@ -205,6 +209,8 @@ class MerkleTree:
             return True
 
     def __eq__(self,other):
+        if not isinstance(other,MerkleTree):
+            return False
         return self.description == other.description and self.root.hash == other.root.hash
 
 class Block:
@@ -253,6 +259,8 @@ class Block:
         b.getHash()
         if type == 'full':
             b.transactions = MerkleTree.deserialize(json_data['transactions'])
+        elif type == 'simplified':
+            b.transactions = None
         return b
 
     def validate(self):
@@ -264,13 +272,18 @@ class Block:
 
 class Blockchain:
 
+    private = '3e59b1763f5191b0ab15975c7a6b77f8a55c922f68baddbf1c1c7348884d1736'
+    public = '2fba45a1f17dd07e75092fb63b6d7dd79896d05a0c2afc2504706a6ce60e1f9458c47de9651808418fb197209b385cd2b5ba839c865989e187bcad1190704f83'
     target = '0000281df3c6c88c98e4f6064fb5e8804812de0fadd6a4d47efa38f8db36346c'
     @classmethod
     def new(self):
         # Instantiates object from passed values
         t = Blockchain()
         t.transactions = []
-        t.chain = {'genesis':Block.new(0, None, None, Blockchain.target, transactions=None)}
+        t.balance = {'genesis':{}}
+        genesis_block = Block.new(0, None, None, Blockchain.target, transactions=None)
+        genesis_block.hash = 'genesis'
+        t.chain = {'genesis':genesis_block}
         t.longest = t.chain['genesis']
         return t
 
@@ -278,28 +291,35 @@ class Blockchain:
     def last_block(self):
         return self.longest
 
-    # @staticmethod
-    # def proof_of_work(block):
-    #     # assert block.previous_hash == self.last_block.getHash()
-    #     # while not block.getHash().startswith('0'*Blockchain.difficulty):
-    #     while not block.getHash()<Blockchain.target:
-    #         block.nonce += 1
-    #     print(1,block.getHash())
-    #     return block.getHash()
-
     def addTransaction(self,transaction):
         self.transactions.append(transaction)
     
-    def addBlock(self, block, validate=False):
+    def addBlock(self, block):
         block_hash = block.getHash()
-        if int(block_hash,16)<int(block.header['bits'],16):
-            if block.header['previous_hash'] in self.chain:
-                self.chain[block_hash] = block
-            else:
-                return False
-            self.resolve(block)
-            return True
-        return False
+        # check hash
+        if not int(block_hash,16)<int(block.header['bits'],16):
+            return False
+        # check previous hash
+        if not block.header['previous_hash'] in self.chain:
+            return False
+        # check transactions validity
+        if not block.transactions == None:
+            balance = self.balance[self.last_block.hash].copy()
+            print(balance)
+            t_l = block.transactions.get_list()
+            for t_s in t_l:
+                t = block.transactions.val2leave[t_s].val
+                f_b = balance.get(t.sender,0)-t.amount
+                if f_b<0 and not t.sender == Blockchain.public:
+                    return False
+                else:
+                    if not t.sender == Blockchain.public:
+                        balance[t.sender] = f_b
+                    balance[t.receiver] = balance.get(t.receiver,0)+t.amount
+        self.balance[block_hash] = balance
+        self.chain[block_hash] = block
+        self.resolve(block)
+        return True
 
     # DEPRECATED: moved to Miner
     def mine(self):
@@ -320,14 +340,8 @@ class Blockchain:
         return True
 
     def resolve(self,added_block):
-        if added_block.header.depth > self.longest.header.depth:
+        if added_block.header['depth'] > self.longest.header['depth']:
             self.longest = added_block
-
-    # DEPRECATED: moved to Miner
-    @classmethod
-    def validate(self,transaction):
-        # check with balance of sender
-        return True
 
     # def add(...):
     #     # Sign object with private key passed

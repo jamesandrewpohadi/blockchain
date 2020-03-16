@@ -62,6 +62,7 @@ def testTransaction():
 
     t0.sign(A_priv_s)
     print('sign-validate true:',t0.validate())
+    print('sign-validate true:',t0.validate())
 
     t0.sign(B_priv_s)
     print('sign-validate false:',t0.validate())
@@ -120,7 +121,7 @@ def testBlockchain():
         b.addTransaction(Transaction.new('A','B',i))
     print(b.last_block)
 
-# testTransaction()
+testTransaction()
 # testMerkleTree()
 # testBlock()
 testBlockchain()
