@@ -356,3 +356,9 @@ print('time:',time()-start)
 #Generating wallet
 wallet = Wallet()
 wallet.new_wallet()
+
+######MINER########
+print("\nMINER CLASS\n")
+m = Miner(b)
+block = Block('aabb', 'bbcc', 'a')
+m.proof_of_work(block) #????
