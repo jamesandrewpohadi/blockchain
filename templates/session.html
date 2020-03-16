@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <title>Blockchain App</title>
+  </head>
+  <body>
+    <h1 style = "text-align: center; color: rgb(180, 67, 67)">ChainMeUp</h1>
+    <h3 style='color: rgb(180, 67, 67);font-size: 30px;'>No transactions yet...</h3>
+    <div class="message_holder"></div>
+
+    <form action="" method="POST">
+      <input type="text" class="username text-input" placeholder="From"/> <br><br>
+      <input type="text" class="receiver text-input" placeholder="To"/> <br><br>
+      <input type="text" class="transaction text-input" placeholder="Transaction Amount"/> <br><br>
+      <input type="submit" class="btn"/>
+    </form>
+
+    <!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/1.7.3/socket.io.min.js"></script>
+    <script type="text/javascript">
+
+      var socket = io.connect('http://' + document.domain + ':' + location.port);
+
+      socket.on( 'connect', function() {
+        socket.emit( 'my event', {
+          data: 'User Connected'
+        } )
+        var form = $( 'form' ).on( 'submit', function( e ) {
+          e.preventDefault()
+          let user_name = $( 'input.username' ).val()
+          let receiver = $( 'input.receiver' ).val()
+          let user_input = $( 'input.transaction' ).val()
+          socket.emit( 'my event', {
+            user_name : user_name,
+            receiver: receiver,
+            transaction : user_input
+          } )
+          $( 'input.transaction' ).val( '' ).focus()
+        } )
+      } )
+      socket.on( 'my response', function( msg ) {
+        console.log( msg )
+        if( typeof msg.user_name !== 'undefined' ) {
+          $( 'h3' ).remove()
+          $( 'div.message_holder' ).append( '<div><b style="color: #000">' + msg.user_name + ' sent ' + msg.receiver + ' </b><b style="color: goldenrod"> ' + msg.transaction + 'BTC</b></div><br>' )
+        }
+      })
+    </script>
+
+    <style>
+        .text-input {
+            vertical-align: middle;
+            margin: 5px 10px 5px 0;
+            padding: 10px;
+            border: 2px solid #000;
+            border-radius: 5px;
+        }
+        .btn {
+            padding: 10px 20px;
+            background-color: rgb(180, 67, 67);
+            border-radius: 5px;
+            color: white;
+        }
+
+        .btn:hover {
+            background-color: rgb(223, 5, 5);
+        }
+    </style>
+
+  </body>
+  </html>
