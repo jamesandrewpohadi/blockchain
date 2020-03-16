@@ -13,7 +13,7 @@ from collections import OrderedDict
 class Transaction:
 
     @classmethod
-    def new(self,sender,receiver,amount,comment):
+    def new(self,sender,receiver,amount,comment=''):
         t = Transaction()
         t.sender = sender
         t.receiver = receiver
@@ -33,7 +33,7 @@ class Transaction:
         return t
 
     def serialize(self):
-        string = {
+        data = {
             'sender':self.sender,
             'receiver':self.receiver,
             'amount':self.amount,
@@ -41,7 +41,7 @@ class Transaction:
             'time':self.time,
             'sig':self.sig
         }
-        json_string = json.dumps(string)
+        json_string = json.dumps(data)
         return base64.b64encode(json_string.encode('utf-8')).decode()
 
     @classmethod
@@ -74,11 +74,13 @@ class Transaction:
 
     def validate(self):
         try:
-            vk = ecdsa.VerifyingKey.from_string(bytes.fromhex(self.receiver), curve=ecdsa.SECP256k1)
-            tmp = bytes.fromhex(self.sig)
+            vk = ecdsa.VerifyingKey.from_string(bytes.fromhex(self.sender), curve=ecdsa.SECP256k1)
+            sig = self.sig
+            sig_bytes = bytes.fromhex(self.sig)
             self.sig = ''
             s = self.serialize()
-            return self.vk.verify(tmp,s.encode())
+            self.sig = sig
+            return vk.verify(sig_bytes,s.encode())
         except:
             return False
     
@@ -132,10 +134,6 @@ class LeaveNode:
         return self
 
 class MerkleTree:
-    
-    # def __init__(self,description='James Chain'):
-    #     pass
-
     def add(self,transaction):
         # Add entries to tree
         serialized_transaction = transaction.serialize()
@@ -147,9 +145,13 @@ class MerkleTree:
     def build(self,description='James Chain'):
         # Build tree computing new root
         m = MerkleTree()
-        origin = LeaveNode('Origin').getHash()
-        description = LeaveNode(description).getHash()
         m.description = description
+        t_origin = Transaction.new(None,None,0,'Origin')
+        t_description = Transaction.new(None,None,0,description)
+        t_origin.time = 0
+        t_description.time = 0
+        origin = LeaveNode(t_origin).getHash()
+        description = LeaveNode(t_description).getHash()
         m.root = TreeNode(None,origin,description).getHash()
         m.val2leave = OrderedDict()
         return m
@@ -172,98 +174,134 @@ class MerkleTree:
         return self.root.hash
 
     def serialize(self):
-        pass
+        serialized_transactions = list(self.val2leave.keys())
+        data = {
+            'description':self.description,
+            'transactions':serialized_transactions
+        }
+        json_string = json.dumps(data)
+        return base64.b64encode(json_string.encode('utf-8')).decode()
 
-    def deserialize(self):
-        pass
+    @classmethod
+    def deserialize(self,base64_string):
+        json_string = base64.b64decode(base64_string.encode()).decode()
+        json_data = json.loads(json_string)
+        # origin = LeaveNode('Origin').getHash()
+        # description = LeaveNode(json_data['description']).getHash()
+        
+        m = MerkleTree.build(json_data['description'])
+        for st in json_data['transactions']:
+            transaction = Transaction.deserialize(st)
+            m.add(transaction)
+        return m
+
+    @staticmethod
+    def validate(node):
+        if not isinstance(node,LeaveNode):
+            concat = node.childLeft.hash + node.childRight.hash
+            hash = hashlib.sha256(concat.encode()).hexdigest()
+            return node.hash == hash and MerkleTree.validate(node.childLeft) and MerkleTree.validate(node.childRight)
+        else:
+            return True
+
+    def __eq__(self,other):
+        return self.description == other.description and self.root.hash == other.root.hash
 
 class Block:
 
     @classmethod
-    def new(self, version, previous_hash, root_hash, timestamp, bits, transactions=None):
+    def new(self, depth, previous_hash, root_hash, bits, transactions=None):
         b = Block()
         b.header = {
-            'version':None,
+            'depth':depth,
             'previous_hash': previous_hash,
             'root_hash':root_hash,
-            'timestamp':timestamp,
+            'timestamp':time(),
             'bits':bits,
             'nonce':0
         }
+        b.getHash()
         b.transactions = transactions
         return b
 
     def proof_of_work(self):
-        while not int(self.getHash(),16)<int(self.header['bits'],16):
+        while not int(self.hash,16)<int(self.header['bits'],16):
             self.header['nonce'] += 1
-        return self.getHash()
+            self.getHash()
+        return self.hash
 
     def getHash(self):
         json_string = json.dumps(self.header)
         hash = hashlib.sha256(json_string.encode()).hexdigest()
+        self.hash = hash
         return hash
 
     def serialize(self):
-        transactions = list(self.transactions.val2leave.keys())
-        # MerkleTree
         data_dict = {
             'header': self.header,
-            'transactions': 
+            'transactions': self.transactions.serialize()
         }
         json_string = json.dumps(data_dict)
         return base64.b64encode(json_string.encode('utf-8')).decode()
 
     @classmethod
-    def deserialize(self,base64_string):
+    def deserialize(self,base64_string, type='full'):
         b = Block()
         json_string = base64.b64decode(base64_string.encode()).decode()
         json_data = json.loads(json_string)
         b.header = json_data['header']
-        b.transactions = 
+        b.getHash()
+        if type == 'full':
+            b.transactions = MerkleTree.deserialize(json_data['transactions'])
         return b
 
     def validate(self):
-        pass
+        # validate merkle tree hashes
+        return MerkleTree.validate(self.transactions.root)
     
     def __eq__(self,other):
-        return self.serialize() == other.serialize()
+        return json.dumps(self.header) == json.dumps(other.header)
 
 class Blockchain:
-    difficulty = 4
+
     target = '0000281df3c6c88c98e4f6064fb5e8804812de0fadd6a4d47efa38f8db36346c'
     @classmethod
     def new(self):
         # Instantiates object from passed values
         t = Blockchain()
         t.transactions = []
-        # t.chain = [Block(None,None,time())]
-        t.chain = {'genesis':Block(None,None,time())}
-        print(t.chain[0].getHash())
+        t.chain = {'genesis':Block.new(0, None, None, Blockchain.target, transactions=None)}
+        t.longest = t.chain['genesis']
         return t
 
     @property
     def last_block(self):
-        return self.chain[-1]
+        return self.longest
 
-    @staticmethod
-    def proof_of_work(block):
-        # assert block.previous_hash == self.last_block.getHash()
-        # while not block.getHash().startswith('0'*Blockchain.difficulty):
-        while not block.getHash()<Blockchain.target:
-            block.nonce += 1
-        print(1,block.getHash())
-        return block.getHash()
+    # @staticmethod
+    # def proof_of_work(block):
+    #     # assert block.previous_hash == self.last_block.getHash()
+    #     # while not block.getHash().startswith('0'*Blockchain.difficulty):
+    #     while not block.getHash()<Blockchain.target:
+    #         block.nonce += 1
+    #     print(1,block.getHash())
+    #     return block.getHash()
 
     def addTransaction(self,transaction):
         self.transactions.append(transaction)
     
-    def addBlock(self, block, proof):
-        if block.previous_hash != self.last_block.getHash():
-            return False
-        block.hash = proof
-        self.chain.append(block)
-        return True
+    def addBlock(self, block, validate=False):
+        block_hash = block.getHash()
+        if int(block_hash,16)<int(block.header['bits'],16):
+            if block.header['previous_hash'] in self.chain:
+                self.chain[block_hash] = block
+            else:
+                return False
+            self.resolve(block)
+            return True
+        return False
 
+    # DEPRECATED: moved to Miner
     def mine(self):
         if len(self.transactions)==0:
             return False
@@ -271,21 +309,25 @@ class Blockchain:
         transactions = self.transactions
         merkleTree = MerkleTree.build()
         for transaction in transactions:
-            merkleTree.add(transaction)
-        # print(2,last_block.getHash())
-        block = Block(last_block.getHash(),merkleTree.root.hash,time())
+            if self.validate(transaction):
+                merkleTree.add(transaction)
+        block = Block.new(last_block.header['depth'], last_block.header['previous_hash'], merkleTree.root, Blockchain.target, transactions=merkleTree)
+        # block = Block(last_block.getHash(),merkleTree.root.hash,time())
         # print(1,merkleTree.root.hash)
         proof = self.proof_of_work(block)
         self.addBlock(block,proof)
         self.transactions = []
         return True
 
-    def resolve():
-        pass
+    def resolve(self,added_block):
+        if added_block.header.depth > self.longest.header.depth:
+            self.longest = added_block
 
+    # DEPRECATED: moved to Miner
     @classmethod
-    def validate(self):
-        pass
+    def validate(self,transaction):
+        # check with balance of sender
+        return True
 
     # def add(...):
     #     # Sign object with private key passed
@@ -324,35 +366,3 @@ class Wallet:
         }
         print(response)
         return response
-        
-###########################
-######## TESTING ##########
-###########################
-
-a = Transaction()
-
-# b = Block('a','b','c','d')
-# print(json.dump(b.__dict__))
-start = time()
-transactions = []
-for i in range(1000):
-    transactions.append(Transaction.new('A','B',random.randint(10,10000),'comment'))
-
-b = Blockchain.new()
-print(b.chain)
-for i in range(10):
-    b.addTransaction(Transaction.new('A','B',random.randint(10,10000),'comment'))
-start = time()
-b.mine()
-print('time:',time()-start)
-print(b.chain)
-for i in range(10):
-    b.addTransaction(Transaction.new('A','B',random.randint(10,10000),'comment'))
-start = time()
-b.mine()
-print(b.chain)
-print('time:',time()-start)
-
-#Generating wallet
-wallet = Wallet()
-wallet.new_wallet()
