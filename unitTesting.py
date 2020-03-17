@@ -1,4 +1,6 @@
 from utils import *
+from miner import *
+from SPVClient import *
 
 ###########################
 ######## TESTING ##########
@@ -121,7 +123,41 @@ def testBlockchain():
         b.addTransaction(Transaction.new('A','B',i))
     print(b.last_block)
 
+def doubleSpending():
+    attacker = SPVClient()
+    seller = SPVClient()
+
+    m1 = Miner()
+    m2 = Miner()
+    m3 = Miner()
+
+    val1 = m1.mine()
+    val2 = m2.mine()
+    val3 = m3.mine()
+    print('Minner 1 value ', val1)
+    print('Minner 2 value ', val2)
+    print('Minner 3 value ', val3)
+
+    m1.transfer(attacker, 50)
+    m2.transfer(attacker, 30)
+    m3.transfer(attacker, 40)
+
+    attacker.transfer(seller, 100)
+
+    # print out the wallet value of the SPVclient
+
+def selfishMinning():
+
+#    create one block, fork it half way, start to mine both side
+
+
+
+#######################################
+######## RUN DIFFERENT CASES ##########
+#######################################
+
 testTransaction()
 # testMerkleTree()
 # testBlock()
 testBlockchain()
+# doubleSpending()
