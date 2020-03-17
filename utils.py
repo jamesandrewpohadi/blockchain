@@ -139,8 +139,12 @@ class MerkleTree:
         # Add entries to tree
         serialized_transaction = transaction.serialize()
         leave = LeaveNode(transaction).getHash()
+        if self.val2leave.get(serialized_transaction,None) != None:
+            print('Transaction rejected since already exist in the MerkleTree')
+            return False
         self.val2leave[serialized_transaction] = leave
         self.root = self.root.addLeave(leave)
+        return True
 
     @classmethod
     def build(self,description='James Chain'):
@@ -281,7 +285,7 @@ class Blockchain:
         t = Blockchain()
         t.transactions = []
         t.balance = {'genesis':{}}
-        genesis_block = Block.new(0, None, None, Blockchain.target, transactions=None)
+        genesis_block = Block.new(0, None, None, Blockchain.target, transactions=MerkleTree.build())
         genesis_block.hash = 'genesis'
         t.chain = {'genesis':genesis_block}
         t.longest = t.chain['genesis']
@@ -296,6 +300,16 @@ class Blockchain:
     
     def addBlock(self, block):
         block_hash = block.getHash()
+        valid = self.validate(block)
+        if not valid:
+            return False
+        self.balance[block_hash] = valid
+        self.chain[block_hash] = block
+        self.resolve(block)
+        return True
+
+    def validate(self,block):
+        block_hash = block.getHash()
         # check hash
         if not int(block_hash,16)<int(block.header['bits'],16):
             return False
@@ -304,10 +318,16 @@ class Blockchain:
             return False
         # check transactions validity
         if not block.transactions == None:
+            h = self.last_block.hash
+            prev_t = []
+            for i in range(6):
+                prev_t.extend(self.chain[h].transactions.get_list())
+            prev_t = set(prev_t)
             balance = self.balance[self.last_block.hash].copy()
-            print(balance)
             t_l = block.transactions.get_list()
             for t_s in t_l:
+                if t_s in prev_t:
+                    return False
                 t = block.transactions.val2leave[t_s].val
                 f_b = balance.get(t.sender,0)-t.amount
                 if f_b<0 and not t.sender == Blockchain.public:
@@ -316,28 +336,7 @@ class Blockchain:
                     if not t.sender == Blockchain.public:
                         balance[t.sender] = f_b
                     balance[t.receiver] = balance.get(t.receiver,0)+t.amount
-        self.balance[block_hash] = balance
-        self.chain[block_hash] = block
-        self.resolve(block)
-        return True
-
-    # DEPRECATED: moved to Miner
-    def mine(self):
-        if len(self.transactions)==0:
-            return False
-        last_block = self.last_block
-        transactions = self.transactions
-        merkleTree = MerkleTree.build()
-        for transaction in transactions:
-            if self.validate(transaction):
-                merkleTree.add(transaction)
-        block = Block.new(last_block.header['depth'], last_block.header['previous_hash'], merkleTree.root, Blockchain.target, transactions=merkleTree)
-        # block = Block(last_block.getHash(),merkleTree.root.hash,time())
-        # print(1,merkleTree.root.hash)
-        proof = self.proof_of_work(block)
-        self.addBlock(block,proof)
-        self.transactions = []
-        return True
+        return balance
 
     def resolve(self,added_block):
         if added_block.header['depth'] > self.longest.header['depth']:

@@ -14,10 +14,18 @@ class Miner:
     def mine(self):
         bc = self.blockchain
         balance = bc.balance[bc.last_block.hash].copy()
+        h = bc.last_block.hash
+        prev_t = []
+        for i in range(6):
+            prev_t.extend(bc.chain[h].transactions.get_list())
+        prev_t = set(prev_t)
         m = MerkleTree.build()
         for t in bc.transactions:
             # validate transaction
             f_b = balance.get(t.sender,0)-t.amount
+            if t.serialize() in prev_t:
+                print('Ignoring transation')
+                continue
             if f_b>=0 and t.validate():
                 balance[t.sender] = f_b
                 m.add(t)
@@ -43,20 +51,6 @@ class Miner:
         self.blockchain.add(transaction)
 
 # class SPVClient:
-
-# m = Miner()
-# m.mine()
-# print(m.blockchain.chain)
-# print(m.blockchain.balance)
-# m.mine()
-# print(m.blockchain.chain)
-# print(m.blockchain.balance)
-# m.mine()
-# print(m.blockchain.chain)
-# print(m.blockchain.balance)
-# m.mine()
-# print(m.blockchain.chain)
-# print(m.blockchain.balance)
 
 
 """

@@ -1,4 +1,5 @@
 from utils import *
+from miner import *
 
 ###########################
 ######## TESTING ##########
@@ -119,9 +120,22 @@ def testBlockchain():
     b = Blockchain.new()
     for i in range(20):
         b.addTransaction(Transaction.new('A','B',i))
-    print(b.last_block)
+    print(b.last_block.hash)
 
-testTransaction()
+def testMiner():
+    print('='*25)
+    print('# Test Miner')
+    print('='*25)
+    m = Miner()
+    start = time()
+    while time()-start < 60:
+        m.mine()
+    print('time:',time()-start)
+    print('chain:',len(list(m.blockchain.chain.keys())))
+    # print('balance:',m.blockchain.balance)
+
+# testTransaction()
 # testMerkleTree()
 # testBlock()
-testBlockchain()
+# testBlockchain()
+testMiner()
