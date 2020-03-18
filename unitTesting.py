@@ -1,5 +1,5 @@
 from utils import *
-from miner import *
+from Miner import *
 
 ###########################
 ######## TESTING ##########
@@ -128,14 +128,49 @@ def testMiner():
     print('='*25)
     m = Miner()
     start = time()
-    while time()-start < 60:
+    while time()-start < 600:
         m.mine()
     print('time:',time()-start)
     print('chain:',len(list(m.blockchain.chain.keys())))
+    print('balance:',m.blockchain.balance)
     # print('balance:',m.blockchain.balance)
+
+def doubleSpending():
+    attacker = SPVClient()
+    seller = SPVClient()
+
+    m1 = Miner()
+    m2 = Miner()
+    m3 = Miner()
+
+    val1 = m1.mine()
+    val2 = m2.mine()
+    val3 = m3.mine()
+    print('Minner 1 value ', val1)
+    print('Minner 2 value ', val2)
+    print('Minner 3 value ', val3)
+
+    m1.transfer(attacker, 50)
+    m2.transfer(attacker, 30)
+    m3.transfer(attacker, 40)
+
+    attacker.transfer(seller, 100)
+
+    # print out the wallet value of the SPVclient
+
+def selfishMinning():
+    pass
+#    create one block, fork it half way, start to mine both side
+
+
+
+#######################################
+######## RUN DIFFERENT CASES ##########
+#######################################
 
 # testTransaction()
 # testMerkleTree()
 # testBlock()
 # testBlockchain()
 testMiner()
+# doubleSpending()

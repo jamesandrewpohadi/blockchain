@@ -86,7 +86,9 @@ class Transaction:
     
     def __eq__(self,other):
         return self.id == other.id
-        # return self.sender == other.sender and self.receiver == other.receiver and self.amount == other.amount and self.comment == other.comment
+
+    def __str__(self):
+        return 'Transaction({}..)'.format(self.id[:6])
 
 class TreeNode:
     def __init__(self,parent,childLeft,childRight):
@@ -212,6 +214,10 @@ class MerkleTree:
         else:
             return True
 
+    # @staticmethod
+    # def verify_proof():
+
+
     def __eq__(self,other):
         if not isinstance(other,MerkleTree):
             return False
@@ -274,15 +280,20 @@ class Block:
     def __eq__(self,other):
         return json.dumps(self.header) == json.dumps(other.header)
 
+    def __str__(self):
+        return 'Block(..{})'.format(self.hash[-6:])
+
 class Blockchain:
 
     private = '3e59b1763f5191b0ab15975c7a6b77f8a55c922f68baddbf1c1c7348884d1736'
     public = '2fba45a1f17dd07e75092fb63b6d7dd79896d05a0c2afc2504706a6ce60e1f9458c47de9651808418fb197209b385cd2b5ba839c865989e187bcad1190704f83'
-    target = '0000281df3c6c88c98e4f6064fb5e8804812de0fadd6a4d47efa38f8db36346c'
+    target = '0000181df3c6c88c98e4f6064fb5e8804812de0fadd6a4d47efa38f8db36346c'
+    
     @classmethod
-    def new(self):
+    def new(self,name):
         # Instantiates object from passed values
         t = Blockchain()
+        t.name = name
         t.transactions = []
         t.balance = {'genesis':{}}
         genesis_block = Block.new(0, None, None, Blockchain.target, transactions=MerkleTree.build())
@@ -296,16 +307,24 @@ class Blockchain:
         return self.longest
 
     def addTransaction(self,transaction):
-        self.transactions.append(transaction)
+        if self.transaction.validate():
+            print('{} added {}'.format(self.name,transaction))
+            self.transactions.append(transaction)
+
+    def get_proof(self,transaction):
+        bc = self.blockchain
+        block = bc.last_block
     
     def addBlock(self, block):
         block_hash = block.getHash()
         valid = self.validate(block)
         if not valid:
+            print('{} dropped {}'.format(self.name,block))
             return False
         self.balance[block_hash] = valid
         self.chain[block_hash] = block
         self.resolve(block)
+        print('{} added {}'.format(self.name,block))
         return True
 
     def validate(self,block):
@@ -318,12 +337,18 @@ class Blockchain:
             return False
         # check transactions validity
         if not block.transactions == None:
-            h = self.last_block.hash
+            prev_block = self.last_block
             prev_t = []
-            for i in range(6):
-                prev_t.extend(self.chain[h].transactions.get_list())
+            while prev_block.header['previous_hash']:
+                prev_t.extend(prev_block.transactions.get_list())
+                prev_block = self.chain[prev_block.header['previous_hash']]
             prev_t = set(prev_t)
-            balance = self.balance[self.last_block.hash].copy()
+            # h = self.last_block.hash
+            # prev_t = []
+            # for i in range(6):
+            #     prev_t.extend(self.chain[h].transactions.get_list())
+            # prev_t = set(prev_t)
+            balance = self.balance[block.header['previous_hash']].copy()
             t_l = block.transactions.get_list()
             for t_s in t_l:
                 if t_s in prev_t:
@@ -339,7 +364,7 @@ class Blockchain:
         return balance
 
     def resolve(self,added_block):
-        if added_block.header['depth'] > self.longest.header['depth']:
+        if added_block.header['depth'] >= self.longest.header['depth']:
             self.longest = added_block
 
     # def add(...):
@@ -350,10 +375,6 @@ class Blockchain:
     # def validate(...):
     #     # Validate transaction correctness.
     #     # Can be called within from_json()
-    #     ...
-
-    # def __eq__(...):
-    #     # Check whether transactions are the same
     #     ...
 
 def verify_proof(entry, proof, root):
@@ -368,14 +389,35 @@ def verify_proof(entry, proof, root):
             curr_hash = hashlib.sha256((curr_hash+node.hash).encode()).hexdigest()
     return target_hash == curr_hash
 
-class Wallet:      
-    def new_wallet(self):
-        random_gen = Crypto.Random.new().read
-        private_key = RSA.generate(1024, random_gen)
-        public_key = private_key.publickey()
-        response = {
-            'private_key': binascii.hexlify(private_key.exportKey(format='DER')).decode('ascii'),
-            'public_key': binascii.hexlify(public_key.exportKey(format='DER')).decode('ascii')
+class Wallet:   
+    def __init__(self,name,ip,port,type='miner'):
+        self.name = name
+        self.ip = ip
+        self.port = port
+        sk = ecdsa.SigningKey.generate(curve=ecdsa.SECP256k1) 
+        vk = sk.get_verifying_key()
+        self.private = sk.to_string().hex()
+        self.public = vk.to_string().hex()
+        self.type = type
+        self.contacts = {
+            'miner':[],
+            'spv':[]
         }
-        print(response)
-        return response
+
+    def get_id(self):
+        return {
+            'address':'http://{}:{}'.format(self.ip,self.port),
+            'public':self.public,
+            'type':self.type
+        }
+
+    # def new_wallet(self):
+    #     random_gen = Crypto.Random.new().read
+    #     private_key = RSA.generate(1024, random_gen)
+    #     public_key = private_key.publickey()
+    #     response = {
+    #         'private_key': binascii.hexlify(private_key.exportKey(format='DER')).decode('ascii'),
+    #         'public_key': binascii.hexlify(public_key.exportKey(format='DER')).decode('ascii')
+    #     }
+    #     print(response)
+    #     return response

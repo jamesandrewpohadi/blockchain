@@ -20,4 +20,4 @@ def handle_my_custom_event(json, methods=['GET', 'POST']):
 
 if __name__ == '__main__':
     # socketio.run(app, host = '0.0.0.0', port = 8080, debug = True) #running at http://127.0.0.1:5000
-    socketio.run(app, host = '0.0.0.0', port = 8080)
+    socketio.run(app, host = '0.0.0.0', port = 8081)
