@@ -9,6 +9,7 @@ import Crypto.Random
 from Crypto.PublicKey import RSA
 import binascii
 from collections import OrderedDict
+import random
 
 class Transaction:
 
@@ -234,17 +235,23 @@ class Block:
             'root_hash':root_hash,
             'timestamp':time(),
             'bits':bits,
-            'nonce':0
+            'nonce':random.randint(0,10000)
         }
         b.getHash()
         b.transactions = transactions
         return b
 
-    def proof_of_work(self):
+    def proof_of_work(self,miner):
         while not int(self.hash,16)<int(self.header['bits'],16):
+            if miner.status == 'normal':
+                if miner.blockchain.last_block.header['depth']>=self.header['depth']:
+                    return False
+            elif miner.status == 'attack':
+                if miner.blockchain.private_block.header['depth']>=self.header['depth']:
+                    return False
             self.header['nonce'] += 1
             self.getHash()
-        return self.hash
+        return True
 
     def getHash(self):
         json_string = json.dumps(self.header)
@@ -297,7 +304,7 @@ class Blockchain:
 
     private = '3e59b1763f5191b0ab15975c7a6b77f8a55c922f68baddbf1c1c7348884d1736'
     public = '2fba45a1f17dd07e75092fb63b6d7dd79896d05a0c2afc2504706a6ce60e1f9458c47de9651808418fb197209b385cd2b5ba839c865989e187bcad1190704f83'
-    target = '0000081df3c6c88c98e4f6064fb5e8804812de0fadd6a4d47efa38f8db36346c'
+    target = '0000181df3c6c88c98e4f6064fb5e8804812de0fadd6a4d47efa38f8db36346c'
     
     @classmethod
     def new(self,name):
@@ -310,6 +317,7 @@ class Blockchain:
         genesis_block.hash = 'genesis'
         t.chain = {'genesis':genesis_block}
         t.longest = t.chain['genesis']
+        t.private_block = genesis_block
         t.b_queue = []
         return t
 
@@ -326,7 +334,7 @@ class Blockchain:
     #     bc = self.blockchain
     #     block = bc.last_block
     
-    def addBlock(self, block):
+    def addBlock(self, block,private=False):
         block_hash = block.getHash()
         valid = self.validate(block)
         if not valid:
@@ -336,6 +344,8 @@ class Blockchain:
             self.balance[block_hash] = valid
         self.chain[block_hash] = block
         self.resolve(block)
+        if private:
+            self.resolve_private(block)
         print('{} added {}'.format(self.name,block))
         return True
 
@@ -380,6 +390,10 @@ class Blockchain:
         if added_block.header['depth'] >= self.longest.header['depth']:
             self.longest = added_block
 
+    def resolve_private(self,added_block):
+        if added_block.header['depth'] >= self.private_block.header['depth']:
+            self.private_block = added_block
+
     # def add(...):
     #     # Sign object with private key passed
     #     # That can be called within new()
@@ -405,7 +419,7 @@ class Blockchain:
         return target_hash == curr_hash
 
 class Wallet:   
-    def __init__(self,name,ip,port,type='miner'):
+    def __init__(self,name,ip,port,pool,type='miner'):
         self.name = name
         self.ip = ip
         self.port = port
@@ -413,6 +427,7 @@ class Wallet:
         vk = sk.get_verifying_key()
         self.private = sk.to_string().hex()
         self.public = vk.to_string().hex()
+        self.pool = pool
         self.type = type
         self.contacts = {
             'miner':[],
@@ -423,7 +438,8 @@ class Wallet:
         return {
             'address':'http://{}:{}'.format(self.ip,self.port),
             'public':self.public,
-            'type':self.type
+            'type':self.type,
+            'pool':self.pool
         }
 
     # def new_wallet(self):

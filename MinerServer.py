@@ -18,16 +18,19 @@ log.setLevel(logging.ERROR)
 to_verify = {}
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-n','--name',default='James')
-parser.add_argument('-i','--ip',default='0.0.0.0')
-parser.add_argument('-p','--port',default=8080,type=int)
+parser.add_argument('-name','--name',default='James')
+parser.add_argument('-ip','--ip',default='0.0.0.0')
+parser.add_argument('-port','--port',default=8080,type=int)
+parser.add_argument('-pool','--pool',default='normal')
+parser.add_argument('-role','--role',default='normal')
+parser.add_argument('-mode','--mode',default=0,type=int)
 args = parser.parse_args()
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'sanjayjameskundanbryan'
 # socketio = SocketIO(app)
 
-def run():
+def run(mode):
     time.sleep(1)
     for process in processes:
         if process != args.port:
@@ -36,15 +39,15 @@ def run():
             miner.contacts[data['type']].append(data)
             del data['type']
     print(miner.contacts)
-    miner.run()
-    # while True:
-        # if fork:
-        #     fork = False
-        #     fork(miner_hash)
-        # miner.mine()
+    if mode == 0:
+        miner.run('normal')
+    elif mode == 1:
+        miner.run('double spending attack')
+    elif mode == 2:
+        miner.run('selfish mining attack')
 
-miner = Miner(args.name,args.ip,args.port)
-_thread.start_new_thread( run, () )
+miner = Miner(args.name,args.ip,args.port,args.pool,args.role)
+_thread.start_new_thread( run, (args.mode,) )
 # _thread.start_new_thread( miner.run, () )
 
 @app.route('/get_id')
@@ -57,7 +60,10 @@ def get_balance():
 
 @app.route('/get_last_block')
 def get_last_block():
-    return str(miner.blockchain.last_block)
+    return {
+        'public':miner.blockchain.last_block.header['depth'],
+        'private':miner.blockchain.private_block.header['depth']
+    }
 
 @app.route('/get_all_chain')
 def get_all_chain():
@@ -71,12 +77,21 @@ def test():
     print(a)
     return 'ok'
 
+@app.route('/get_status',methods=['POST'])
+def get_status():
+    data = request.get_json()
+    miner.status = data['status']
+    return 'ok'
+
 @app.route('/add_block', methods=['POST'])
 def add_block():
     data = request.get_json()
     serialized_block = data['block']
     block = Block.deserialize(serialized_block)
-    miner.addBlock(block)
+    private = data.get('pool',None) == miner.pool and miner.status == 'attack'
+    miner.addBlock(block,private)
+    # if data.get('pool',None) == miner.pool and miner.status == 'attack':
+    #     miner.blockchain.private_block = block
     if to_verify.get(block.header['depth'],False):
         for t in to_verify[block.header['depth']]:
             res = miner.get_proof(t)
@@ -84,13 +99,7 @@ def add_block():
                 print('{}: {} is not in blockchain'.format(miner.name,t))
                 continue
             block_hash,proof = res
-            # print(block_hash)
-            result = miner.verify_proof(t,block_hash,proof)
-            # if result:
-                
-            # else:
-            #     print(2,'{}: {} is not in blockchain'.format(miner.name,t))
-                
+            result = miner.verify_proof(t,block_hash,proof)     
     return 'received'
 
 @app.route('/add_transaction', methods=['POST'])
@@ -111,6 +120,12 @@ def get_proof():
         return {'status':True,'block_hash':proof[0],'proof':proof[1]}
     else:
         return {'status':False}
+
+@app.route('/set_status', methods=['POST'])
+def set_status():
+    data = request.get_json()
+    miner.status = data['status']
+    return 'ok'
 # @app.route('/verify_proof', methods=['POST'])
 # def verify_proof():
 
@@ -122,7 +137,7 @@ def receive_transaction():
     data = request.get_json()
     serialized_transaction = data['transaction']
     transaction = Transaction.deserialize(serialized_transaction)
-    print('{} get notice on {}'.format(miner.name,transaction))
+    print('{} get notice on {}'.format(miner,transaction))
     check_when = miner.blockchain.last_block.header['depth']+2
     to_verify[check_when] = to_verify.get(check_when,[])+[transaction]
     # _thread.start_new_thread( get_proof, (serialized_transaction) )
@@ -138,6 +153,4 @@ def receive_transaction():
 #     socketio.emit('my response', json, callback=messageReceived)
 
 if __name__ == '__main__':
-    # socketio.run(app, host = '0.0.0.0', port = 8080, debug = True) #running at http://127.0.0.1:5000
-    # _thread.start_new_thread(app.run,(args.host, args.port,1,False))
     app.run(host = args.ip, port = args.port,processes=1,threaded = False)

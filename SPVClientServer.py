@@ -18,16 +18,19 @@ log.setLevel(logging.ERROR)
 to_verify = {}
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-n','--name',default='James')
-parser.add_argument('-i','--ip',default='0.0.0.0')
-parser.add_argument('-p','--port',default=8080,type=int)
+parser.add_argument('-name','--name',default='James')
+parser.add_argument('-ip','--ip',default='0.0.0.0')
+parser.add_argument('-port','--port',default=8080,type=int)
+parser.add_argument('-pool','--pool',default='normal')
+parser.add_argument('-role','--role',default='normal')
+parser.add_argument('-mode','--mode',default=0,type=int)
 args = parser.parse_args()
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'sanjayjameskundanbryan'
 # socketio = SocketIO(app)
 
-def run():
+def run(mode):
     time.sleep(1)
     for process in processes:
         if process != args.port:
@@ -36,15 +39,15 @@ def run():
             spv.contacts[data['type']].append(data)
             del data['type']
     print(spv.contacts)
-    spv.run()
-    # while True:
-        # if fork:
-        #     fork = False
-        #     fork(spv_hash)
-        # spv.mine()
+    if mode == 0:
+        spv.run('normal')
+    elif mode == 1:
+        spv.run('double spending attack')
+    elif mode == 2:
+        spv.run('selfish mining attack')
 
-spv = SPVClient(args.name,args.ip,args.port)
-_thread.start_new_thread( run, () )
+spv = SPVClient(args.name,args.ip,args.port,args.pool,args.role)
+_thread.start_new_thread( run, (args.mode,) )
 # _thread.start_new_thread( spv.run, () )
 
 @app.route('/get_id')
@@ -59,7 +62,6 @@ def get_last_block():
 def get_all_chain():
     chain_hash = {k:v.header['previous_hash'] for k,v in spv.blockchain.chain.items()}
     return chain_hash
-    # return json.dumps(spv.blockchain.chain)
 
 @app.route('/test',methods=['POST'])
 def test():
@@ -98,12 +100,10 @@ def receive_transaction():
     data = request.get_json()
     serialized_transaction = data['transaction']
     transaction = Transaction.deserialize(serialized_transaction)
-    print('{} get notice on {}'.format(spv.name,transaction))
+    print('{} get notice on {}'.format(spv,transaction))
     check_when = spv.blockchain.last_block.header['depth']+2
     to_verify[check_when] = to_verify.get(check_when,[])+[transaction]
     return 'received'
 
 if __name__ == '__main__':
-    # socketio.run(app, host = '0.0.0.0', port = 8080, debug = True) #running at http://127.0.0.1:5000
-    # _thread.start_new_thread(app.run,(args.host, args.port,1,False))
     app.run(host = args.ip, port = args.port,processes=1,threaded = False)
