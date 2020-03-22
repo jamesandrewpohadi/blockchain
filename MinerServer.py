@@ -10,10 +10,12 @@ from config import processes
 import requests
 import random
 import json
+from utils import Transaction, Block
 
 import logging
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
+to_verify = {}
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-n','--name',default='James')
@@ -35,6 +37,11 @@ def run():
             del data['type']
     print(miner.contacts)
     miner.run()
+    # while True:
+        # if fork:
+        #     fork = False
+        #     fork(miner_hash)
+        # miner.mine()
 
 miner = Miner(args.name,args.ip,args.port)
 _thread.start_new_thread( run, () )
@@ -68,34 +75,57 @@ def test():
 def add_block():
     data = request.get_json()
     serialized_block = data['block']
-    miner.addBlock(serialized_block)
+    block = Block.deserialize(serialized_block)
+    miner.addBlock(block)
+    if to_verify.get(block.header['depth'],False):
+        for t in to_verify[block.header['depth']]:
+            res = miner.get_proof(t)
+            if not res:
+                print('{}: {} is not in blockchain'.format(miner.name,t))
+                continue
+            block_hash,proof = res
+            # print(block_hash)
+            result = miner.verify_proof(t,block_hash,proof)
+            # if result:
+                
+            # else:
+            #     print(2,'{}: {} is not in blockchain'.format(miner.name,t))
+                
     return 'received'
-    # return miner.get_balance()
 
 @app.route('/add_transaction', methods=['POST'])
 def add_transaction():
     data = request.get_json()
     serialized_transaction = data['transaction']
-    miner.addTransaction(serialized_transaction)
+    transaction = Transaction.deserialize(serialized_transaction)
+    miner.addTransaction(transaction)
     return 'received'
 
-def get_proof(serialize_transaction):
-    time.sleep(10)
-    r = requests.post('{}/get_proof'.format(miner['address']), json={"transaction":serialize_transaction})
-    transaction = Transaction.deserialize(serialize_transaction)
-    data = r.json()
-    if miner.bc.verify_proof(data):
-        print('{} verified {}'.format(self.name,transaction))
-
+@app.route('/get_proof', methods=['POST'])
+def get_proof():
+    data = request.get_json()
+    serialized_transaction = data['transaction']
+    transaction = Transaction.deserialize(serialized_transaction)
+    proof = miner.get_proof(transaction)
+    if proof:
+        return {'status':True,'block_hash':proof[0],'proof':proof[1]}
+    else:
+        return {'status':False}
 # @app.route('/verify_proof', methods=['POST'])
 # def verify_proof():
+
+# def fork(block_hash):
 
 
 @app.route('/receive_transaction', methods=['POST'])
 def receive_transaction():
     data = request.get_json()
     serialized_transaction = data['transaction']
-    _thread.start_new_thread( get_proof, (serialized_transaction) )
+    transaction = Transaction.deserialize(serialized_transaction)
+    print('{} get notice on {}'.format(miner.name,transaction))
+    check_when = miner.blockchain.last_block.header['depth']+2
+    to_verify[check_when] = to_verify.get(check_when,[])+[transaction]
+    # _thread.start_new_thread( get_proof, (serialized_transaction) )
     # miner.addTransaction(serialized_transaction)
     return 'received'
 

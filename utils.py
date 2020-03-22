@@ -170,9 +170,9 @@ class MerkleTree:
         node = self.val2leave[serialized_transaction]
         while node.parent != None:
             if node.parent.childLeft.hash == node.hash:
-                proof.append(node.parent.childRight)
+                proof.append('R'+node.parent.childRight.hash)
             else:
-                proof.append(node.parent.childLeft)
+                proof.append('L'+node.parent.childLeft.hash)
             node = node.parent
         return proof
 
@@ -276,6 +276,16 @@ class Block:
     def validate(self):
         # validate merkle tree hashes
         return MerkleTree.validate(self.transactions.root)
+
+    def verify_transaction(self,transaction,proof):
+        serialized_transaction = transaction.serialize()
+        curr_hash = hashlib.sha256(serialized_transaction.encode()).hexdigest()
+        for node in proof:
+            if node.startswith("L"):
+                curr_hash = hashlib.sha256((node[1:]+curr_hash).encode()).hexdigest()
+            elif node.startswith("R"):
+                curr_hash = hashlib.sha256((curr_hash+node[1:]).encode()).hexdigest()
+        return self.header['root_hash'] == curr_hash
     
     def __eq__(self,other):
         return json.dumps(self.header) == json.dumps(other.header)
@@ -287,7 +297,7 @@ class Blockchain:
 
     private = '3e59b1763f5191b0ab15975c7a6b77f8a55c922f68baddbf1c1c7348884d1736'
     public = '2fba45a1f17dd07e75092fb63b6d7dd79896d05a0c2afc2504706a6ce60e1f9458c47de9651808418fb197209b385cd2b5ba839c865989e187bcad1190704f83'
-    target = '0000181df3c6c88c98e4f6064fb5e8804812de0fadd6a4d47efa38f8db36346c'
+    target = '0000081df3c6c88c98e4f6064fb5e8804812de0fadd6a4d47efa38f8db36346c'
     
     @classmethod
     def new(self,name):
@@ -300,6 +310,7 @@ class Blockchain:
         genesis_block.hash = 'genesis'
         t.chain = {'genesis':genesis_block}
         t.longest = t.chain['genesis']
+        t.b_queue = []
         return t
 
     @property
@@ -307,13 +318,13 @@ class Blockchain:
         return self.longest
 
     def addTransaction(self,transaction):
-        if self.transaction.validate():
+        if transaction.validate():
             print('{} added {}'.format(self.name,transaction))
             self.transactions.append(transaction)
 
-    def get_proof(self,transaction):
-        bc = self.blockchain
-        block = bc.last_block
+    # def get_proof(self,transaction):
+    #     bc = self.blockchain
+    #     block = bc.last_block
     
     def addBlock(self, block):
         block_hash = block.getHash()
@@ -321,7 +332,8 @@ class Blockchain:
         if not valid:
             print('{} dropped {}'.format(self.name,block))
             return False
-        self.balance[block_hash] = valid
+        if block.transactions != None:
+            self.balance[block_hash] = valid
         self.chain[block_hash] = block
         self.resolve(block)
         print('{} added {}'.format(self.name,block))
@@ -361,7 +373,8 @@ class Blockchain:
                     if not t.sender == Blockchain.public:
                         balance[t.sender] = f_b
                     balance[t.receiver] = balance.get(t.receiver,0)+t.amount
-        return balance
+            return balance
+        return True
 
     def resolve(self,added_block):
         if added_block.header['depth'] >= self.longest.header['depth']:
@@ -377,17 +390,19 @@ class Blockchain:
     #     # Can be called within from_json()
     #     ...
 
-def verify_proof(entry, proof, root):
-    # Verify the proof for the entry and given root. Returns boolean.
-    target_hash = root.hash
-    serialized_entry = entry.serialize()
-    curr_hash = hashlib.sha256(serialized_entry.encode()).hexdigest()
-    for node in proof:
-        if node.mode == "L":
-            curr_hash = hashlib.sha256((node.hash+curr_hash).encode()).hexdigest()
-        elif node.mode == "R":
-            curr_hash = hashlib.sha256((curr_hash+node.hash).encode()).hexdigest()
-    return target_hash == curr_hash
+    @staticmethod
+    def verify_proof(entry, proof, root):
+        # Verify the proof for the entry and given root. Returns boolean.
+        prev_block = bc.last_block
+        target_hash = root.hash
+        serialized_entry = entry.serialize()
+        curr_hash = hashlib.sha256(serialized_entry.encode()).hexdigest()
+        for node in proof:
+            if node.mode == "L":
+                curr_hash = hashlib.sha256((node.hash+curr_hash).encode()).hexdigest()
+            elif node.mode == "R":
+                curr_hash = hashlib.sha256((curr_hash+node.hash).encode()).hexdigest()
+        return target_hash == curr_hash
 
 class Wallet:   
     def __init__(self,name,ip,port,type='miner'):

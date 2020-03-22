@@ -8,7 +8,7 @@ socketio = SocketIO(app)
 # For the home page (denoted by the '/'):
 @app.route('/')
 def sessions():
-    return render_template('session.html')
+    return {'a':'1'}
 
 def messageReceived(methods=['GET', 'POST']):
     print('Transaction received!!!')

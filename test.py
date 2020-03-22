@@ -1,3 +1,13 @@
-import requests
+def fib(n):
+    l = [0,1]
+    x = 0
+    while l[-2:] != l[:2] or len(l)==2:
+        x+=1
+        l.append((l[x]+l[x-1])%10)
+    # print(l)
+    return l[n%x]
 
-r = requests.post('http://localhost:8000/test', json={"key": "value"})
+for i in range(100):
+    print(fib(i))
+
+# print(fib(60))
