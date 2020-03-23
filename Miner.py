@@ -13,8 +13,9 @@ class Miner(Wallet):
         self.t_block = threading.Lock()
         self.status = 'normal'
         self.role = role
+        self.block_queue = []
 
-    def mine(self,private=False):
+    def mine(self):
         bc = self.blockchain
         last_block = bc.last_block
         balance = bc.balance[last_block.hash].copy()
@@ -54,6 +55,53 @@ class Miner(Wallet):
         # broadcast the new block
         for contact in self.contacts['miner']+self.contacts['spv']:
             requests.post('{}/add_block'.format(contact['address']), json={"block": block.serialize()})
+        return True
+
+    def selfish_mine(self):
+        bc = self.blockchain
+        last_block = bc.private_block
+        balance = bc.balance[last_block.hash].copy()
+        prev_block = last_block
+        prev_t = []
+        while prev_block.header['previous_hash']:
+            prev_t.extend(prev_block.transactions.get_list())
+            prev_block = bc.chain[prev_block.header['previous_hash']]
+        prev_t = set(prev_t)
+        m = MerkleTree.build()
+        self.t_lock.acquire()
+        bc_transactions = bc.transactions
+        bc.transactions = []
+        self.t_lock.release()
+        for t in bc_transactions:
+            # validate transaction
+            f_b = balance.get(t.sender,0)-t.amount
+            if t.serialize() in prev_t:
+                print('{} ignored {}: transaction already exists in blockchain'.format(self,t))
+                continue
+            if f_b>=0 and t.validate():
+                balance[t.sender] = f_b
+                m.add(t)
+            else:
+                print('{} ignore {}: not enough balance'.format(self,t))
+
+        # add reward
+        reward = Transaction.new(Blockchain.public,self.public,100)
+        reward.sign(Blockchain.private)
+        m.add(reward)
+        block = Block.new(last_block.header['depth']+1,last_block.hash,m.root.hash,bc.target,m)
+        pow = block.proof_of_work(self,True)
+        if not pow:
+            return False
+        print('{} secretly found {}'.format(self,block))
+        bc.addBlock(block,True)
+        self.t_block.acquire()
+        self.block_queue.append(block)
+        self.t_block.release()
+        # broadcast the new block to pool
+        for contact in self.contacts['miner']+self.contacts['spv']:
+            if contact['pool'] == self.pool:
+                print(1)
+                requests.post('{}/add_block'.format(contact['address']), json={"block": block.serialize(),"pool":self.pool})
         return True
 
     def fork(self,block):
@@ -101,7 +149,6 @@ class Miner(Wallet):
     def get_proof(self,transaction):
         bc = self.blockchain
         prev_block = bc.last_block
-        # prev_t = []
         serialized_transaction = transaction.serialize()
         while prev_block.header['previous_hash']:
             if serialized_transaction in prev_block.transactions.get_list():
@@ -127,6 +174,10 @@ class Miner(Wallet):
         return bc.balance[bc.last_block.hash]
 
     def addBlock(self,block,private=False):
+        if self.role == 'main attacker' and private == True:
+            self.t_block.acquire()
+            self.block_queue.append(block)
+            self.t_block.release()
         self.blockchain.addBlock(block,private)
 
     def addTransaction(self,transaction):
@@ -163,7 +214,6 @@ class Miner(Wallet):
                 while self.blockchain.last_block.header['depth'] !=  self.blockchain.private_block.header['depth']:
                     self.fork(self.blockchain.private_block)
                 # self.fork(self.las)
-                print('### {}: Attack on {} succeed ###'.format(self,transaction))
                 self.status = 'normal'
                 for contact in self.contacts['miner']:
                     if contact['pool'] == self.pool:
@@ -173,6 +223,7 @@ class Miner(Wallet):
                     print('{}: {} is not in blockchain'.format(self,transaction))
                 else:
                     print('{}: {} is not in blockchain'.format(self,transaction))
+                print('### {}: Attack on {} succeed ###'.format(self,transaction))
         else:
             while True:
                 if self.status == 'attack':
@@ -180,24 +231,57 @@ class Miner(Wallet):
                 else:
                     self.mine()
     
-    
+    def reveal(self):
+        if len(self.block_queue) == 0:
+            return False
+        for block in self.block_queue:
+            print('{} revealed {}'.format(self,block))
+            for contact in self.contacts['miner']+self.contacts['spv']:
+                if contact['pool'] != self.pool:
+                    requests.post('{}/add_block'.format(contact['address']), json={"block": block.serialize(),"pool":self.pool})
+        self.t_block.acquire()
+        self.block_queue = []
+        self.t_block.release()
+        return True
+
     def selfish_mining_attack(self):
         # pass
+        print('### {} launch selfish mining attack'.format(self))
         self.status = 'attack'
-        if self.role = 'main attacker':
+        p_computing_power = (1+len([c for c in self.contacts['miner'] if c['pool']==self.pool]))*100/(1+len(self.contacts['miner']))
+        print('pool computing power: {:.2f}%'.format(p_computing_power))
+        if self.role == 'main attacker':
+        # if True:
+            reward = 0
             while True:
+                if self.blockchain.private_block.header['depth']>self.blockchain.last_block.header['depth']:
+                    print('lead')
+                    self.selfish_mine()
+                elif self.blockchain.private_block.header['depth']==self.blockchain.last_block.header['depth']:
+                    print('eq')
+                    self.reveal()
+                    reward += 1 if self.selfish_mine() else 0
+                else:
+                    reward = 0
+                    print('lose')
+                    self.blockchain.private_block = self.blockchain.last_block
+                    reward += 1 if self.selfish_mine() else 0
+                hash = self.blockchain.last_block.hash
+                p_total_money = sum([self.blockchain.balance[hash].get(c['public'],0) for c in self.contacts['miner'] if c['pool']==self.pool])+self.blockchain.balance[hash].get(self.public,0)
+                total_money = sum(self.blockchain.balance[hash].values())
+                if total_money != 0:
+                    p_money = p_total_money*100/total_money
+                    print('Attackers computing power: {:.2f}%, attackers reward: {:.2f}%'.format(p_computing_power,p_money))
         else:
             while True:
-                self.mine(True)
+                self.selfish_mine()
         
     def normal(self):
         while True:
             self.mine()
-            # if len(self.contacts['spv']) != 0 and random.random()<0.8:
-            #     contact = random.choice(self.contacts['spv'])
-            # else:
-            #     contact = random.choice(self.contacts['miner'])
-            # self.transfer(contact,random.randint(10,30))
+            if len(self.contacts['spv']) != 0 and random.random()<0.8:
+                contact = random.choice(self.contacts['spv'])
+                self.transfer(contact,random.randint(10,30))
 
     def run(self,mode):
         if mode == 'normal':

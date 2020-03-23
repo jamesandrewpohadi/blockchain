@@ -1,5 +1,5 @@
-python3 MinerServer.py -p 8000 -n James \
-& python3 MinerServer.py -p 8001 -n Sanjay \
-& python3 MinerServer.py -p 8002 -n Kundan \
-& python3 MinerServer.py -p 8003 -n Bryan \
-& python3 MinerServer.py -p 8004 -n Pawel
+python3 MinerServer.py -id 0 -n 5 -name James -mode 0 \
+& python3 MinerServer.py -id 1 -n 5 -name Sanjay -mode 0 \
+& python3 MinerServer.py -id 2 -n 5 -name Kundan -mode 0 \
+& python3 SPVClientServer.py -id 3 -n 5 -name Bryan -mode 0 \
+& python3 SPVClientServer.py -id 4 -n 5 -name Pawel -mode 0

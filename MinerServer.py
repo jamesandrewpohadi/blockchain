@@ -20,7 +20,8 @@ to_verify = {}
 parser = argparse.ArgumentParser()
 parser.add_argument('-name','--name',default='James')
 parser.add_argument('-ip','--ip',default='0.0.0.0')
-parser.add_argument('-port','--port',default=8080,type=int)
+parser.add_argument('-id','--id',default=8080,type=int)
+parser.add_argument('-n','--n',default=5,type=int)
 parser.add_argument('-pool','--pool',default='normal')
 parser.add_argument('-role','--role',default='normal')
 parser.add_argument('-mode','--mode',default=0,type=int)
@@ -28,13 +29,13 @@ args = parser.parse_args()
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'sanjayjameskundanbryan'
-# socketio = SocketIO(app)
 
 def run(mode):
     time.sleep(1)
-    for process in processes:
-        if process != args.port:
-            r = requests.get('http://localhost:{}/get_id'.format(process))
+    for id in range(args.n):
+        if id != args.id:
+            port = 8000+id
+            r = requests.get('http://localhost:{}/get_id'.format(port))
             data = r.json()
             miner.contacts[data['type']].append(data)
             del data['type']
@@ -46,7 +47,7 @@ def run(mode):
     elif mode == 2:
         miner.run('selfish mining attack')
 
-miner = Miner(args.name,args.ip,args.port,args.pool,args.role)
+miner = Miner(args.name,args.ip,args.id+8000,args.pool,args.role)
 _thread.start_new_thread( run, (args.mode,) )
 # _thread.start_new_thread( miner.run, () )
 
@@ -69,7 +70,6 @@ def get_last_block():
 def get_all_chain():
     chain_hash = {k:v.header['previous_hash'] for k,v in miner.blockchain.chain.items()}
     return chain_hash
-    # return json.dumps(miner.blockchain.chain)
 
 @app.route('/test',methods=['POST'])
 def test():
@@ -90,8 +90,7 @@ def add_block():
     block = Block.deserialize(serialized_block)
     private = data.get('pool',None) == miner.pool and miner.status == 'attack'
     miner.addBlock(block,private)
-    # if data.get('pool',None) == miner.pool and miner.status == 'attack':
-    #     miner.blockchain.private_block = block
+    
     if to_verify.get(block.header['depth'],False):
         for t in to_verify[block.header['depth']]:
             res = miner.get_proof(t)
@@ -126,11 +125,6 @@ def set_status():
     data = request.get_json()
     miner.status = data['status']
     return 'ok'
-# @app.route('/verify_proof', methods=['POST'])
-# def verify_proof():
-
-# def fork(block_hash):
-
 
 @app.route('/receive_transaction', methods=['POST'])
 def receive_transaction():
@@ -140,17 +134,7 @@ def receive_transaction():
     print('{} get notice on {}'.format(miner,transaction))
     check_when = miner.blockchain.last_block.header['depth']+2
     to_verify[check_when] = to_verify.get(check_when,[])+[transaction]
-    # _thread.start_new_thread( get_proof, (serialized_transaction) )
-    # miner.addTransaction(serialized_transaction)
     return 'received'
 
-# def messageReceived(methods=['GET', 'POST']):
-#     print('Transaction received!!!')
-
-# @socketio.on('my event')
-# def handle_my_custom_event(json, methods=['GET', 'POST']):
-#     print('Event received --- ' + str(json))
-#     socketio.emit('my response', json, callback=messageReceived)
-
 if __name__ == '__main__':
-    app.run(host = args.ip, port = args.port,processes=1,threaded = False)
+    app.run(host = args.ip, port = args.id+8000,processes=1,threaded = False)

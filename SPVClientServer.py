@@ -20,7 +20,8 @@ to_verify = {}
 parser = argparse.ArgumentParser()
 parser.add_argument('-name','--name',default='James')
 parser.add_argument('-ip','--ip',default='0.0.0.0')
-parser.add_argument('-port','--port',default=8080,type=int)
+parser.add_argument('-id','--id',default=8080,type=int)
+parser.add_argument('-n','--n',default=5,type=int)
 parser.add_argument('-pool','--pool',default='normal')
 parser.add_argument('-role','--role',default='normal')
 parser.add_argument('-mode','--mode',default=0,type=int)
@@ -32,9 +33,10 @@ app.config['SECRET_KEY'] = 'sanjayjameskundanbryan'
 
 def run(mode):
     time.sleep(1)
-    for process in processes:
-        if process != args.port:
-            r = requests.get('http://localhost:{}/get_id'.format(process))
+    for id in range(args.n):
+        if id != args.id:
+            port = 8000+id
+            r = requests.get('http://localhost:{}/get_id'.format(port))
             data = r.json()
             spv.contacts[data['type']].append(data)
             del data['type']
@@ -46,7 +48,7 @@ def run(mode):
     elif mode == 2:
         spv.run('selfish mining attack')
 
-spv = SPVClient(args.name,args.ip,args.port,args.pool,args.role)
+spv = SPVClient(args.name,args.ip,args.id+8000,args.pool,args.role)
 _thread.start_new_thread( run, (args.mode,) )
 # _thread.start_new_thread( spv.run, () )
 
@@ -106,4 +108,4 @@ def receive_transaction():
     return 'received'
 
 if __name__ == '__main__':
-    app.run(host = args.ip, port = args.port,processes=1,threaded = False)
+    app.run(host = args.ip, port = args.id+8000,processes=1,threaded = False)

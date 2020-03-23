@@ -29,8 +29,6 @@ class Transaction:
             'time':t.time
         })
         t.id = hashlib.sha256(id.encode()).hexdigest()
-        # t.sk = ecdsa.SigningKey.generate()
-        # t.vk = t.sk.get_verifying_key()
         return t
 
     def serialize(self):
@@ -197,8 +195,6 @@ class MerkleTree:
     def deserialize(self,base64_string):
         json_string = base64.b64decode(base64_string.encode()).decode()
         json_data = json.loads(json_string)
-        # origin = LeaveNode('Origin').getHash()
-        # description = LeaveNode(json_data['description']).getHash()
         
         m = MerkleTree.build(json_data['description'])
         for st in json_data['transactions']:
@@ -214,10 +210,6 @@ class MerkleTree:
             return node.hash == hash and MerkleTree.validate(node.childLeft) and MerkleTree.validate(node.childRight)
         else:
             return True
-
-    # @staticmethod
-    # def verify_proof():
-
 
     def __eq__(self,other):
         if not isinstance(other,MerkleTree):
@@ -235,20 +227,28 @@ class Block:
             'root_hash':root_hash,
             'timestamp':time(),
             'bits':bits,
-            'nonce':random.randint(0,10000)
+            'nonce':random.randint(0,100000)
         }
         b.getHash()
         b.transactions = transactions
         return b
 
-    def proof_of_work(self,miner):
+    def proof_of_work(self,miner,selfish=False):
         while not int(self.hash,16)<int(self.header['bits'],16):
             if miner.status == 'normal':
                 if miner.blockchain.last_block.header['depth']>=self.header['depth']:
                     return False
+                elif miner.blockchain.last_block.hash != self.header['previous_hash']:
+                    return False
             elif miner.status == 'attack':
+                if selfish and miner.blockchain.last_block.header['depth']==self.header['depth']-1:
+                    miner.reveal()
+                if selfish and miner.blockchain.last_block.header['depth']>self.header['depth']-1:
+                    return False
                 if miner.blockchain.private_block.header['depth']>=self.header['depth']:
                     return False
+                # if miner.blockchain.private_block.hash!=self.header['previous_hash']:
+                #     return False
             self.header['nonce'] += 1
             self.getHash()
         return True
@@ -318,7 +318,6 @@ class Blockchain:
         t.chain = {'genesis':genesis_block}
         t.longest = t.chain['genesis']
         t.private_block = genesis_block
-        t.b_queue = []
         return t
 
     @property
@@ -327,12 +326,8 @@ class Blockchain:
 
     def addTransaction(self,transaction):
         if transaction.validate():
-            print('{} added {}'.format(self.name,transaction))
+            # print('{} added {}'.format(self.name,transaction))
             self.transactions.append(transaction)
-
-    # def get_proof(self,transaction):
-    #     bc = self.blockchain
-    #     block = bc.last_block
     
     def addBlock(self, block,private=False):
         block_hash = block.getHash()
@@ -343,10 +338,11 @@ class Blockchain:
         if block.transactions != None:
             self.balance[block_hash] = valid
         self.chain[block_hash] = block
-        self.resolve(block)
         if private:
             self.resolve_private(block)
-        print('{} added {}'.format(self.name,block))
+        else:
+            self.resolve(block)
+        # print('{} added {}'.format(self.name,block))
         return True
 
     def validate(self,block):
@@ -365,11 +361,6 @@ class Blockchain:
                 prev_t.extend(prev_block.transactions.get_list())
                 prev_block = self.chain[prev_block.header['previous_hash']]
             prev_t = set(prev_t)
-            # h = self.last_block.hash
-            # prev_t = []
-            # for i in range(6):
-            #     prev_t.extend(self.chain[h].transactions.get_list())
-            # prev_t = set(prev_t)
             balance = self.balance[block.header['previous_hash']].copy()
             t_l = block.transactions.get_list()
             for t_s in t_l:
@@ -393,16 +384,6 @@ class Blockchain:
     def resolve_private(self,added_block):
         if added_block.header['depth'] >= self.private_block.header['depth']:
             self.private_block = added_block
-
-    # def add(...):
-    #     # Sign object with private key passed
-    #     # That can be called within new()
-    #     ...
-
-    # def validate(...):
-    #     # Validate transaction correctness.
-    #     # Can be called within from_json()
-    #     ...
 
     @staticmethod
     def verify_proof(entry, proof, root):
@@ -441,14 +422,3 @@ class Wallet:
             'type':self.type,
             'pool':self.pool
         }
-
-    # def new_wallet(self):
-    #     random_gen = Crypto.Random.new().read
-    #     private_key = RSA.generate(1024, random_gen)
-    #     public_key = private_key.publickey()
-    #     response = {
-    #         'private_key': binascii.hexlify(private_key.exportKey(format='DER')).decode('ascii'),
-    #         'public_key': binascii.hexlify(public_key.exportKey(format='DER')).decode('ascii')
-    #     }
-    #     print(response)
-    #     return response
