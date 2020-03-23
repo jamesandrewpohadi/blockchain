@@ -6,7 +6,6 @@ import _thread
 from flaskthreads import ThreadPoolWithAppContextExecutor
 import time
 from multiprocessing import Process
-from config import processes
 import requests
 import random
 import json

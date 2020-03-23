@@ -100,7 +100,6 @@ class Miner(Wallet):
         # broadcast the new block to pool
         for contact in self.contacts['miner']+self.contacts['spv']:
             if contact['pool'] == self.pool:
-                print(1)
                 requests.post('{}/add_block'.format(contact['address']), json={"block": block.serialize(),"pool":self.pool})
         return True
 
@@ -222,7 +221,7 @@ class Miner(Wallet):
                 if proof == False:
                     print('{}: {} is not in blockchain'.format(self,transaction))
                 else:
-                    print('{}: {} is not in blockchain'.format(self,transaction))
+                    print('{}: {} is in blockchain'.format(self,transaction))
                 print('### {}: Attack on {} succeed ###'.format(self,transaction))
         else:
             while True:
@@ -246,7 +245,7 @@ class Miner(Wallet):
 
     def selfish_mining_attack(self):
         # pass
-        print('### {} launch selfish mining attack'.format(self))
+        print('### {} launch selfish mining attack ###'.format(self))
         self.status = 'attack'
         p_computing_power = (1+len([c for c in self.contacts['miner'] if c['pool']==self.pool]))*100/(1+len(self.contacts['miner']))
         print('pool computing power: {:.2f}%'.format(p_computing_power))
@@ -255,15 +254,14 @@ class Miner(Wallet):
             reward = 0
             while True:
                 if self.blockchain.private_block.header['depth']>self.blockchain.last_block.header['depth']:
-                    print('lead')
+                    if reward >= 2:
+                        self.reveal()
                     self.selfish_mine()
                 elif self.blockchain.private_block.header['depth']==self.blockchain.last_block.header['depth']:
-                    print('eq')
                     self.reveal()
                     reward += 1 if self.selfish_mine() else 0
                 else:
                     reward = 0
-                    print('lose')
                     self.blockchain.private_block = self.blockchain.last_block
                     reward += 1 if self.selfish_mine() else 0
                 hash = self.blockchain.last_block.hash
